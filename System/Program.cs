@@ -11,7 +11,7 @@ class Client
     private const string ServerIP = "193.58.121.250";
     private const int ServerPort = 7175;
     private const int PingInterval = 30000;
-    private const int ReconnectInterval = 5000; // Пауза для переподключения (5 секунд)
+    private const int ReconnectInterval = 6000; // Пауза для переподключения (5 секунд)
 
     static void Main()
     {
